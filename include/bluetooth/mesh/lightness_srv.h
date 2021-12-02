@@ -20,6 +20,9 @@
 #include <bluetooth/mesh/gen_lvl_srv.h>
 #include <bluetooth/mesh/gen_ponoff_srv.h>
 #include <bluetooth/mesh/model_types.h>
+#if CONFIG_SHDN_MANAGER
+#include <shdn/shdn_manager.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -134,6 +137,14 @@ struct bt_mesh_lightness_srv_handlers {
 		const struct bt_mesh_lightness_range *new_range);
 };
 
+/** Persistent storage handling */
+struct bt_mesh_lightness_srv_settings_data {
+	struct bt_mesh_lightness_range range;
+	uint16_t default_light;
+	uint16_t last;
+	bool is_on;
+} __packed;
+
 /**
  * Light Lightness Server instance.
  *
@@ -165,20 +176,25 @@ struct bt_mesh_lightness_srv {
 	/** Storage timer */
 	struct k_work_delayable store_timer;
 #endif
-	/** Current Light Level Range. */
-	struct bt_mesh_lightness_range range;
-	/** Current Default Light Level. */
-	uint16_t default_light;
-	/** The last known Light Level. */
-	uint16_t last;
+	struct {
+		/** Current Light Level Range. */
+		struct bt_mesh_lightness_range range;
+		/** Current Default Light Level. */
+		uint16_t default_light;
+		/** The last known Light Level. */
+		uint16_t last;
+		/** Internal flag state. */
+		atomic_t flags;
+	} persistent;
 	/** The delta start Light Level */
 	uint16_t delta_start;
-	/** Internal flag state. */
-	atomic_t flags;
 
 #if defined(CONFIG_BT_MESH_LIGHT_CTRL_SRV)
 	/** Acting controller, if enabled. */
 	struct bt_mesh_light_ctrl_srv *ctrl;
+#endif
+#if CONFIG_SHDN_MANAGER
+	struct shdn_dynamic_entry shdn_data;
 #endif
 };
 

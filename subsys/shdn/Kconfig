@@ -1,0 +1,87 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig SHDN_MANAGER
+	bool
+	prompt "Shutdown Manager"
+	select BT_SETTINGS
+	default n
+	help
+	  Enable Shutdown Manager.
+
+if SHDN_MANAGER
+
+choice
+	prompt "Initial log level limit"
+	default SHDN_MANAGER_LOG_LEVEL_WRN
+
+config SHDN_MANAGER_LOG_LEVEL_DBG
+	bool "Debug"
+
+config SHDN_MANAGER_LOG_LEVEL_INF
+	bool "Info"
+
+config SHDN_MANAGER_LOG_LEVEL_WRN
+	bool "Warning"
+
+config SHDN_MANAGER_LOG_LEVEL_ERR
+	bool "Error"
+
+config SHDN_MANAGER_LOG_LEVEL_NONE
+	bool "None"
+
+endchoice
+
+config SHDN_MANAGER_LOG_LEVEL
+	int
+	default 0 if SHDN_MANAGER_LOG_LEVEL_NONE
+	default 1 if SHDN_MANAGER_LOG_LEVEL_ERR
+	default 2 if SHDN_MANAGER_LOG_LEVEL_WRN
+	default 3 if SHDN_MANAGER_LOG_LEVEL_INF
+	default 4 if SHDN_MANAGER_LOG_LEVEL_DBG
+
+choice
+	prompt "Initial log level limit"
+	default SHDN_STORAGE_LOG_LEVEL_WRN
+
+config SHDN_STORAGE_LOG_LEVEL_DBG
+	bool "Debug"
+
+config SHDN_STORAGE_LOG_LEVEL_INF
+	bool "Info"
+
+config SHDN_STORAGE_LOG_LEVEL_WRN
+	bool "Warning"
+
+config SHDN_STORAGE_LOG_LEVEL_ERR
+	bool "Error"
+
+config SHDN_STORAGE_LOG_LEVEL_NONE
+	bool "None"
+endchoice
+
+config SHDN_STORAGE_LOG_LEVEL
+	int
+	default 0 if SHDN_STORAGE_LOG_LEVEL_NONE
+	default 1 if SHDN_STORAGE_LOG_LEVEL_ERR
+	default 2 if SHDN_STORAGE_LOG_LEVEL_WRN
+	default 3 if SHDN_STORAGE_LOG_LEVEL_INF
+	default 4 if SHDN_STORAGE_LOG_LEVEL_DBG
+
+config SHDN_MANAGER_SECTOR_SIZE_MULT
+	int "Sector size of the shutdown storage area"
+	default 1
+	help
+	  The sector size to use for the shutdown storage area as a multiple of
+	  FLASH_ERASE_BLOCK_SIZE.
+
+config SHDN_MANAGER_SECTOR_COUNT
+	int "Sector count of the shutdown storage area"
+	default 1
+	help
+	  Number of sectors used for the NVS settings area
+
+endif # SHDN_MANAGER

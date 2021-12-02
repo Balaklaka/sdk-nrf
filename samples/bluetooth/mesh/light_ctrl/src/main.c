@@ -13,6 +13,9 @@
 #include <dk_buttons_and_leds.h>
 #include "model_handler.h"
 #include "lc_pwm_led.h"
+#if CONFIG_SHDN_MANAGER
+#include <shdn/shdn_manager.h>
+#endif
 
 static void bt_ready(int err)
 {
@@ -26,16 +29,38 @@ static void bt_ready(int err)
 	dk_leds_init();
 	dk_buttons_init(NULL);
 
+#if CONFIG_SHDN_MANAGER
+	err = shdn_manager_init();
+	if (err) {
+		printk("Initializing shdn manager failed (err %d)\n", err);
+		return;
+	}
+#endif
+
 	err = bt_mesh_init(bt_mesh_dk_prov_init(), model_handler_init());
 	if (err) {
 		printk("Initializing mesh failed (err %d)\n", err);
 		return;
 	}
 
+#if CONFIG_SHDN_MANAGER
+	err = shdn_manager_restore();
+	if (err) {
+		printk("Restore of data from shutdown failed (err %d)\n", err);
+	}
+#endif
+
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
 	}
 
+#if CONFIG_SHDN_MANAGER
+	err = shdn_manager_prepare_shutdown();
+	if (err) {
+		printk("Preparation for next shutdown failed (err %d)\n", err);
+		return;
+	}
+#endif
 	/* This will be a no-op if settings_load() loaded provisioning info */
 	bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
 

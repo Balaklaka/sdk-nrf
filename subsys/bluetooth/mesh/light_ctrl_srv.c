@@ -1545,7 +1545,7 @@ static int light_ctrl_srv_init(struct bt_mesh_model *model)
 		return err;
 	}
 
-	atomic_set_bit(&srv->lightness->flags, LIGHTNESS_SRV_FLAG_EXTENDED_BY_LIGHT_CTRL);
+	atomic_set_bit(&srv->lightness->persistent.flags, LIGHTNESS_SRV_FLAG_EXTENDED_BY_LIGHT_CTRL);
 
 	atomic_set_bit(&srv->onoff.flags, GEN_ONOFF_SRV_NO_DTT);
 
@@ -1632,7 +1632,7 @@ static int light_ctrl_srv_start(struct bt_mesh_model *model)
 			} else {
 				light_onoff_pub(srv, srv->state, true);
 			}
-		} else if (atomic_test_bit(&srv->lightness->flags,
+		} else if (atomic_test_bit(&srv->lightness->persistent.flags,
 					   LIGHTNESS_SRV_FLAG_IS_ON)) {
 			lightness_on_power_up(srv->lightness);
 			schedule_resume_timer(srv);

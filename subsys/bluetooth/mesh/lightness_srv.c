@@ -17,14 +17,6 @@
 #define LVL_TO_LIGHT(_lvl) (from_actual((_lvl) + 32768))
 #define LIGHT_TO_LVL(_light) (to_actual((_light)) - 32768)
 
-/** Persistent storage handling */
-struct bt_mesh_lightness_srv_settings_data {
-	struct bt_mesh_lightness_range range;
-	uint16_t default_light;
-	uint16_t last;
-	bool is_on;
-} __packed;
-
 #ifdef BT_DBG_ENABLED
 static const char *const repr_str[] = { "Actual", "Linear" };
 #endif
@@ -37,10 +29,10 @@ static void store_timeout(struct k_work *work)
 		dwork, struct bt_mesh_lightness_srv, store_timer);
 
 	struct bt_mesh_lightness_srv_settings_data data = {
-		.default_light = srv->default_light,
-		.last = srv->last,
-		.is_on = atomic_test_bit(&srv->flags, LIGHTNESS_SRV_FLAG_IS_ON),
-		.range = srv->range,
+		.default_light = srv->persistent.default_light,
+		.last = srv->persistent.last,
+		.is_on = atomic_test_bit(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_IS_ON),
+		.range = srv->persistent.range,
 	};
 
 	BT_DBG("Store: Last: %u Default: %u State: %s Range: [%u - %u]",
@@ -184,10 +176,10 @@ void bt_mesh_lightness_srv_set(struct bt_mesh_lightness_srv *srv,
 	memset(status, 0, sizeof(*status));
 
 	if (set->lvl != 0) {
-		set->lvl = CLAMP(set->lvl, srv->range.min, srv->range.max);
+		set->lvl = CLAMP(set->lvl, srv->persistent.range.min, srv->persistent.range.max);
 	}
 
-	atomic_set_bit_to(&srv->flags, LIGHTNESS_SRV_FLAG_IS_ON, set->lvl > 0);
+	atomic_set_bit_to(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_IS_ON, set->lvl > 0);
 
 	srv->handlers->light_set(srv, ctx, set, status);
 }
@@ -199,17 +191,17 @@ void lightness_srv_change_lvl(struct bt_mesh_lightness_srv *srv,
 			      bool publish)
 {
 	bool state_change =
-		(atomic_test_bit(&srv->flags, LIGHTNESS_SRV_FLAG_IS_ON) ==
+		(atomic_test_bit(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_IS_ON) ==
 		 (set->lvl == 0));
 
 	bt_mesh_lightness_srv_set(srv, ctx, set, status);
 
 	if (set->lvl != 0) {
-		state_change |= (srv->last != set->lvl);
-		srv->last = set->lvl;
+		state_change |= (srv->persistent.last != set->lvl);
+		srv->persistent.last = set->lvl;
 	}
 
-	if (state_change) {
+	if (!IS_ENABLED(CONFIG_SHDN_MANAGER) && state_change) {
 		store_state(srv);
 	}
 
@@ -300,7 +292,7 @@ static int handle_last_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *
 				 BT_MESH_LIGHTNESS_MSG_LEN_LAST_STATUS);
 	bt_mesh_model_msg_init(&rsp, BT_MESH_LIGHTNESS_OP_LAST_STATUS);
 
-	net_buf_simple_add_le16(&rsp, to_actual(srv->last));
+	net_buf_simple_add_le16(&rsp, to_actual(srv->persistent.last));
 	bt_mesh_model_send(model, ctx, &rsp, NULL, NULL);
 
 	return 0;
@@ -315,7 +307,7 @@ static int handle_default_get(struct bt_mesh_model *model, struct bt_mesh_msg_ct
 				 BT_MESH_LIGHTNESS_MSG_LEN_DEFAULT_STATUS);
 	bt_mesh_model_msg_init(&rsp, BT_MESH_LIGHTNESS_OP_DEFAULT_STATUS);
 
-	net_buf_simple_add_le16(&rsp, to_actual(srv->default_light));
+	net_buf_simple_add_le16(&rsp, to_actual(srv->persistent.default_light));
 	bt_mesh_model_send(model, ctx, &rsp, NULL, NULL);
 
 	return 0;
@@ -324,7 +316,7 @@ static int handle_default_get(struct bt_mesh_model *model, struct bt_mesh_msg_ct
 void lightness_srv_default_set(struct bt_mesh_lightness_srv *srv,
 			       struct bt_mesh_msg_ctx *ctx, uint16_t set)
 {
-	uint16_t old = srv->default_light;
+	uint16_t old = srv->persistent.default_light;
 
 	if (set == old) {
 		return;
@@ -332,12 +324,14 @@ void lightness_srv_default_set(struct bt_mesh_lightness_srv *srv,
 
 	BT_DBG("%u", set);
 
-	srv->default_light = set;
+	srv->persistent.default_light = set;
 	if (srv->handlers->default_update) {
 		srv->handlers->default_update(srv, ctx, old, set);
 	}
 
-	store_state(srv);
+	if (!IS_ENABLED(CONFIG_SHDN_MANAGER)) {
+		store_state(srv);
+	}
 }
 
 static int set_default(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
@@ -354,7 +348,7 @@ static int set_default(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 	BT_MESH_MODEL_BUF_DEFINE(rsp, BT_MESH_LIGHTNESS_OP_DEFAULT_STATUS,
 				 BT_MESH_LIGHTNESS_MSG_LEN_DEFAULT_STATUS);
 	bt_mesh_model_msg_init(&rsp, BT_MESH_LIGHTNESS_OP_DEFAULT_STATUS);
-	net_buf_simple_add_le16(&rsp, srv->default_light);
+	net_buf_simple_add_le16(&rsp, srv->persistent.default_light);
 
 	bt_mesh_model_send(model, ctx, &rsp, NULL, NULL);
 
@@ -383,8 +377,8 @@ static int handle_range_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx 
 	bt_mesh_model_msg_init(&rsp, BT_MESH_LIGHTNESS_OP_RANGE_STATUS);
 
 	net_buf_simple_add_u8(&rsp, BT_MESH_MODEL_SUCCESS);
-	net_buf_simple_add_le16(&rsp, to_actual(srv->range.min));
-	net_buf_simple_add_le16(&rsp, to_actual(srv->range.max));
+	net_buf_simple_add_le16(&rsp, to_actual(srv->persistent.range.min));
+	net_buf_simple_add_le16(&rsp, to_actual(srv->persistent.range.max));
 
 	bt_mesh_model_send(model, ctx, &rsp, NULL, NULL);
 
@@ -408,15 +402,17 @@ static int set_range(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		return -EINVAL;
 	}
 
-	if (new.min != srv->range.min || new.max != srv->range.max) {
-		struct bt_mesh_lightness_range old = srv->range;
+	if (new.min != srv->persistent.range.min || new.max != srv->persistent.range.max) {
+		struct bt_mesh_lightness_range old = srv->persistent.range;
 
-		srv->range = new;
+		srv->persistent.range = new;
 		if (srv->handlers->range_update) {
 			srv->handlers->range_update(srv, ctx, &old, &new);
 		}
 
-		store_state(srv);
+		if (!IS_ENABLED(CONFIG_SHDN_MANAGER)) {
+			store_state(srv);
+		}
 	}
 
 	if (!ack) {
@@ -428,8 +424,8 @@ static int set_range(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 	bt_mesh_model_msg_init(&rsp, BT_MESH_LIGHTNESS_OP_RANGE_STATUS);
 
 	net_buf_simple_add_u8(&rsp, BT_MESH_MODEL_SUCCESS);
-	net_buf_simple_add_le16(&rsp, to_actual(srv->range.min));
-	net_buf_simple_add_le16(&rsp, to_actual(srv->range.max));
+	net_buf_simple_add_le16(&rsp, to_actual(srv->persistent.range.min));
+	net_buf_simple_add_le16(&rsp, to_actual(srv->persistent.range.max));
 
 	bt_mesh_model_send(model, ctx, &rsp, NULL, NULL);
 
@@ -611,12 +607,14 @@ static void lvl_delta_set(struct bt_mesh_lvl_srv *lvl_srv,
 	 * started.
 	 */
 	if ((set.lvl == 0) && (from_actual(srv->delta_start) != 0) &&
-	    (from_actual(srv->delta_start) != srv->last)) {
+	    (from_actual(srv->delta_start) != srv->persistent.last)) {
 		/* Recalulate it back to light state when overriding the "last"
 		 * value.
 		 */
-		srv->last = from_actual(srv->delta_start);
-		store_state(srv);
+		srv->persistent.last = from_actual(srv->delta_start);
+		if (!IS_ENABLED(CONFIG_SHDN_MANAGER)) {
+			store_state(srv);
+		}
 	}
 
 	if (rsp) {
@@ -642,9 +640,9 @@ static void lvl_move_set(struct bt_mesh_lvl_srv *lvl_srv,
 	srv->handlers->light_get(srv, NULL, &status);
 
 	if (move_set->delta > 0) {
-		target = srv->range.max;
+		target = srv->persistent.range.max;
 	} else if (move_set->delta < 0) {
-		target = srv->range.min;
+		target = srv->persistent.range.min;
 	} else {
 		target = status.current;
 	}
@@ -716,7 +714,8 @@ static void onoff_set(struct bt_mesh_onoff_srv *onoff_srv,
 	struct bt_mesh_lightness_status status;
 
 	if (onoff_set->on_off) {
-		set.lvl = (srv->default_light ? srv->default_light : srv->last);
+		set.lvl = (srv->persistent.default_light ?
+			   srv->persistent.default_light : srv->persistent.last);
 	} else {
 		set.lvl = 0;
 	}
@@ -756,11 +755,11 @@ const struct bt_mesh_onoff_srv_handlers _bt_mesh_lightness_srv_onoff_handlers = 
 
 static void lightness_srv_reset(struct bt_mesh_lightness_srv *srv)
 {
-	srv->range.min = 1;
-	srv->range.max = UINT16_MAX;
-	srv->default_light = 0;
-	srv->last = UINT16_MAX;
-	atomic_clear_bit(&srv->flags, LIGHTNESS_SRV_FLAG_IS_ON);
+	srv->persistent.range.min = 1;
+	srv->persistent.range.max = UINT16_MAX;
+	srv->persistent.default_light = 0;
+	srv->persistent.last = UINT16_MAX;
+	atomic_clear_bit(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_IS_ON);
 }
 
 static void bt_mesh_lightness_srv_reset(struct bt_mesh_model *model)
@@ -769,7 +768,7 @@ static void bt_mesh_lightness_srv_reset(struct bt_mesh_model *model)
 
 	lightness_srv_reset(srv);
 	net_buf_simple_reset(srv->pub.msg);
-	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+	if (!IS_ENABLED(CONFIG_SHDN_MANAGER) && IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		(void)bt_mesh_model_data_store(srv->lightness_model, false,
 					       NULL, NULL, 0);
 	}
@@ -836,6 +835,8 @@ static int update_handler(struct bt_mesh_model *model)
 	return 0;
 }
 
+#define LIGHTNESS_ID 0xc000
+
 static int bt_mesh_lightness_srv_init(struct bt_mesh_model *model)
 {
 	struct bt_mesh_lightness_srv *srv = model->user_data;
@@ -848,6 +849,13 @@ static int bt_mesh_lightness_srv_init(struct bt_mesh_model *model)
 	srv->pub.update = update_handler;
 	net_buf_simple_init_with_data(&srv->pub_buf, srv->pub_data,
 				      sizeof(srv->pub_data));
+
+#if CONFIG_SHDN_MANAGER
+	srv->shdn_data.entry.data = (uint8_t*)&srv->persistent;
+	srv->shdn_data.entry.len = sizeof(srv->persistent);
+	srv->shdn_data.entry.id = LIGHTNESS_ID;
+	shdn_manager_entry_add(&srv->shdn_data);
+#endif
 
 #if CONFIG_BT_SETTINGS
 	k_work_init_delayable(&srv->store_timer, store_timeout);
@@ -882,10 +890,10 @@ static int bt_mesh_lightness_srv_settings_set(struct bt_mesh_model *model,
 		return -EINVAL;
 	}
 
-	srv->default_light = data.default_light;
-	srv->range = data.range;
-	srv->last = data.last;
-	atomic_set_bit_to(&srv->flags, LIGHTNESS_SRV_FLAG_IS_ON, data.is_on);
+	srv->persistent.default_light = data.default_light;
+	srv->persistent.range = data.range;
+	srv->persistent.last = data.last;
+	atomic_set_bit_to(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_IS_ON, data.is_on);
 
 	return 0;
 }
@@ -903,14 +911,15 @@ int lightness_on_power_up(struct bt_mesh_lightness_srv *srv)
 	case BT_MESH_ON_POWER_UP_OFF:
 		break;
 	case BT_MESH_ON_POWER_UP_ON:
-		set.lvl = (srv->default_light ? srv->default_light : srv->last);
+		set.lvl = (srv->persistent.default_light ?
+			   srv->persistent.default_light : srv->persistent.last);
 		break;
 	case BT_MESH_ON_POWER_UP_RESTORE:
-		if (!atomic_test_bit(&srv->flags, LIGHTNESS_SRV_FLAG_IS_ON)) {
+		if (!atomic_test_bit(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_IS_ON)) {
 			return 0;
 		}
 
-		set.lvl = srv->last;
+		set.lvl = srv->persistent.last;
 		break;
 	default:
 		return -EINVAL;
@@ -923,7 +932,6 @@ int lightness_on_power_up(struct bt_mesh_lightness_srv *srv)
 	return 0;
 }
 
-#ifdef CONFIG_BT_SETTINGS
 static int bt_mesh_lightness_srv_start(struct bt_mesh_model *model)
 {
 	struct bt_mesh_lightness_srv *srv = model->user_data;
@@ -932,21 +940,20 @@ static int bt_mesh_lightness_srv_start(struct bt_mesh_model *model)
 	 * power-up sequence of Light Lightness server according to section 6.5.1.2. Otherwise,
 	 * Light Lightness will execute power-up sequence behavior.
 	 */
-	if (atomic_test_bit(&srv->flags, LIGHTNESS_SRV_FLAG_EXTENDED_BY_LIGHT_CTRL)) {
+	if (atomic_test_bit(&srv->persistent.flags, LIGHTNESS_SRV_FLAG_EXTENDED_BY_LIGHT_CTRL)) {
 		return 0;
 	}
 
 	return lightness_on_power_up(srv);
 }
-#endif
 
 const struct bt_mesh_model_cb _bt_mesh_lightness_srv_cb = {
 	.init = bt_mesh_lightness_srv_init,
 	.reset = bt_mesh_lightness_srv_reset,
 #ifdef CONFIG_BT_SETTINGS
 	.settings_set = bt_mesh_lightness_srv_settings_set,
-	.start = bt_mesh_lightness_srv_start,
 #endif
+	.start = bt_mesh_lightness_srv_start,
 };
 
 static int bt_mesh_lightness_setup_srv_init(struct bt_mesh_model *model)

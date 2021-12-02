@@ -9,8 +9,27 @@
 #include <dk_buttons_and_leds.h>
 #include "model_handler.h"
 #include "lc_pwm_led.h"
+#if CONFIG_SHDN_MANAGER
+#include <shdn/shdn_manager.h>
+#include <irq.h>
+#endif
+
 
 #define PWM_SIZE_STEP 512
+
+#if CONFIG_SHDN_MANAGER
+#define SHDN_DEV_IRQ  24     /* device uses IRQ 24 */
+#define SHDN_DEV_PRIO  0       /* device uses interrupt priority 2 */
+#define SHDN_ISR_ARG  0
+#define SHDN_IRQ_FLAGS 0       /* IRQ flags */
+
+static void reboot_isr(void *arg)
+{
+	ARG_UNUSED(arg);
+
+	shdn_manager_kill();
+}
+#endif
 
 struct lightness_ctx {
 	struct bt_mesh_lightness_srv lightness_srv;
@@ -20,6 +39,15 @@ struct lightness_ctx {
 	uint32_t time_per;
 	uint16_t rem_time;
 };
+
+static void button_handler_cb(uint32_t pressed, uint32_t changed)
+{
+	if (pressed & changed & BIT(0)) {
+#if CONFIG_SHDN_MANAGER
+		NVIC_SetPendingIRQ(SHDN_DEV_IRQ);
+#endif
+	}
+}
 
 /* Set up a repeating delayed work to blink the DK's LEDs when attention is
  * requested.
@@ -194,9 +222,23 @@ void model_handler_start(void)
 {
 	int err;
 
+#if CONFIG_SHDN_MANAGER
+	IRQ_CONNECT(SHDN_DEV_IRQ, SHDN_DEV_PRIO, reboot_isr, SHDN_ISR_ARG, SHDN_IRQ_FLAGS);
+	irq_enable(SHDN_DEV_IRQ);
+#endif
+
+	static struct button_handler button_handler = {
+		.cb = button_handler_cb,
+	};
+
+	dk_button_handler_add(&button_handler);
+
 	if (bt_mesh_is_provisioned()) {
 		return;
 	}
+
+	bt_mesh_ponoff_srv_set(&light_ctrl_srv.lightness->ponoff,
+			       BT_MESH_ON_POWER_UP_RESTORE);
 
 	err = bt_mesh_light_ctrl_srv_enable(&light_ctrl_srv);
 	if (!err) {
