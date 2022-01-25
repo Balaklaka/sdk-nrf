@@ -74,6 +74,11 @@ static void shdn_handler(void)
 	
 	k_sched_unlock();
 
+	uint32_t test;
+	uint32_t addr = 0xFF000;
+	memcpy(&test, (void *)addr, sizeof(test));
+	printk("Test: 0x%04X\n", test);
+
 	/* Hang until reset is pressed or performed. */
 	while(1);
 }

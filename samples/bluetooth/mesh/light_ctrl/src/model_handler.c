@@ -12,6 +12,8 @@
 #if CONFIG_SHDN_MANAGER
 #include <shdn/shdn_manager.h>
 #include <irq.h>
+
+#include <drivers/flash.h>
 #endif
 
 
@@ -44,6 +46,13 @@ static void button_handler_cb(uint32_t pressed, uint32_t changed)
 {
 	if (pressed & changed & BIT(0)) {
 #if CONFIG_SHDN_MANAGER
+		uint32_t test;
+		uint32_t addr = 0xFCFFC;
+		do {
+			memcpy(&test, (void *)addr, sizeof(test));
+			printk("Test: 0x%08X\n", test);
+			addr -= 4;
+		} while (test != 0xFFFFFFFF);
 		NVIC_SetPendingIRQ(SHDN_DEV_IRQ);
 #endif
 	}
