@@ -20,7 +20,15 @@ LOG_MODULE_REGISTER(shdn_manager, CONFIG_SHDN_MANAGER_LOG_LEVEL);
 #define SHDN_STACK_SIZE 500
 #define SHDN_PRIORITY -CONFIG_NUM_COOP_PRIORITIES 
 
+#define ERASE_STACK_SIZE 500
+#define ERASE_PRIORITY 0
+K_SEM_DEFINE(erase_sem, 0, 1);
+#include <drivers/flash.h>
+
 K_SEM_DEFINE(shdn_sem, 0, 1);
+
+#define PIN_DEBUG_ENABLE
+#include <pin_debug_transport.h>
 
 struct shdn_storage {
 	struct shdn_fs cf_shdn;
@@ -40,7 +48,7 @@ static void shdn_handler(void)
 	k_sem_take(&shdn_sem, K_FOREVER);
 
 	LOG_DBG("shdn_handler execute.");
-
+	DBP11_ON;
 	k_sched_lock();
 
 	struct shdn_dynamic_entry *ch;
@@ -72,15 +80,11 @@ static void shdn_handler(void)
 		}
 	}
 	
+	DBP11_OFF;
 	k_sched_unlock();
 
-	uint32_t test;
-	uint32_t addr = 0xFF000;
-	memcpy(&test, (void *)addr, sizeof(test));
-	printk("Test: 0x%04X\n", test);
-
 	/* Hang until reset is pressed or performed. */
-	while(1);
+	sys_reboot(1);
 }
 
 K_THREAD_DEFINE(shdn_tid, SHDN_STACK_SIZE,
@@ -162,7 +166,6 @@ void shdn_manager_entry_add(struct shdn_dynamic_entry *entry)
 
 void shdn_manager_kill(void)
 {
-	
 	(void)irq_lock();
 	/* Stop the radio ... */
 	nrf_radio_task_trigger(NRF_RADIO, NRF_RADIO_TASK_DISABLE);
@@ -219,3 +222,42 @@ int shdn_manager_prepare_shutdown(void)
 
 	return rc;
 }
+
+void shdn_manager_erase_release(void)
+{
+	k_sem_give(&erase_sem);
+}
+
+static void erase_handler(void)
+{
+	const struct flash_area *fa;
+	const struct device *fd;
+	int rc;
+
+	LOG_DBG("erase_handler started.");
+	rc = flash_area_open(FLASH_AREA_ID(storage), &fa);
+	if (rc) {
+		LOG_ERR("Flash area open failed (%d)\n", rc);
+		return;
+	}
+
+	fd = device_get_binding(fa->fa_dev_name);
+	if (!fd) {
+		LOG_ERR("No valid flash device found");
+		return;
+	}
+
+	k_sem_reset(&erase_sem);
+	k_sem_take(&erase_sem, K_FOREVER);
+	DBP10_ON;
+	rc = flash_erase(fd, 0xfe000, 0x1000);
+	if (rc) {
+		LOG_ERR("Flash area erase failed (%d)\n", rc);
+		return;
+	}
+	DBP10_OFF;
+}
+
+K_THREAD_DEFINE(erase_tid, ERASE_STACK_SIZE,
+		erase_handler, NULL, NULL, NULL,
+		ERASE_PRIORITY, 0, 0);

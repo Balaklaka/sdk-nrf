@@ -82,6 +82,7 @@ void shdn_manager_entry_add(struct shdn_dynamic_entry *entry);
  * 
  */
 void shdn_manager_kill();
+void shdn_manager_erase_release(void);
 
 /**
  * @brief Restore all data after boot up.

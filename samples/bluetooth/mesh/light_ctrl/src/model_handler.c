@@ -16,6 +16,10 @@
 #include <drivers/flash.h>
 #endif
 
+#define PIN_DEBUG_ENABLE
+#include <pin_debug_transport.h>
+
+#include <settings/settings.h>
 
 #define PWM_SIZE_STEP 512
 
@@ -28,8 +32,10 @@
 static void reboot_isr(void *arg)
 {
 	ARG_UNUSED(arg);
-
+	DBP8_OFF;
+	DBP8_ON;
 	shdn_manager_kill();
+	DBP8_OFF;
 }
 #endif
 
@@ -46,13 +52,16 @@ static void button_handler_cb(uint32_t pressed, uint32_t changed)
 {
 	if (pressed & changed & BIT(0)) {
 #if CONFIG_SHDN_MANAGER
-		uint32_t test;
-		uint32_t addr = 0xFCFFC;
-		do {
-			memcpy(&test, (void *)addr, sizeof(test));
-			printk("Test: 0x%08X\n", test);
-			addr -= 4;
-		} while (test != 0xFFFFFFFF);
+		shdn_manager_erase_release();
+		k_sleep(K_MSEC(34));
+
+		// uint32_t test;
+		// uint32_t addr = 0xFCFFC;
+		// do {
+		// 	memcpy(&test, (void *)addr, sizeof(test));
+		// 	printk("Test: 0x%08X\n", test);
+		// 	addr -= 4;
+		// } while (test != 0xFFFFFFFF);
 		NVIC_SetPendingIRQ(SHDN_DEV_IRQ);
 #endif
 	}
@@ -221,6 +230,8 @@ static const struct bt_mesh_comp comp = {
 
 const struct bt_mesh_comp *model_handler_init(void)
 {
+	// DBP_PORTA_ENABLE;
+	// DBP_PORTB_ENABLE;
 	k_work_init_delayable(&attention_blink_work, attention_blink);
 	k_work_init_delayable(&my_ctx.per_work, periodic_led_work);
 
