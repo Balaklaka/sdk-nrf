@@ -1,0 +1,26 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig EMDS
+	bool
+	prompt "Emergency Data Storage"
+	default n
+	help
+	  Enable Emergency Data Storage.
+
+if EMDS
+
+config EMDS_SECTOR_COUNT
+	int "Sector count of the emergency data storage area"
+	default 1
+	help
+	  Number of sectors used for the emergency data storage area
+
+module = EMDS
+module-str = emergency data storage
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # EMDS
