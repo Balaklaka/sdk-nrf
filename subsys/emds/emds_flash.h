@@ -120,12 +120,11 @@ ssize_t emds_flash_read(struct emds_fs *fs, uint16_t id, void *data, size_t len)
  * @warning Should only be called once.
  *
  * @param fs Pointer to file system
- * @param entry_cnt Total number of entries
- * @param byte_size Total number of data bytes
+ * @param byte_size Total number of bytes
  *
  * @retval 0 on success or negative error code
  */
-int emds_flash_prepare(struct emds_fs *fs, int entry_cnt, int byte_size);
+int emds_flash_prepare(struct emds_fs *fs, int byte_size);
 
 /**
  * @brief Get remaining raw space on the flash device.

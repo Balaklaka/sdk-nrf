@@ -400,15 +400,14 @@ ssize_t emds_flash_read(struct emds_fs *fs, uint16_t id, void *data, size_t len)
 	return wlk_ate.len;
 }
 
-int emds_flash_prepare(struct emds_fs *fs, int entry_cnt, int byte_size)
+int emds_flash_prepare(struct emds_fs *fs, int byte_size)
 {
 	if (!fs->is_initialized) {
 		LOG_ERR("EMDS flash not initialized");
 		return -EACCES;
 	}
 
-	if ((entry_cnt * fs->ate_size + byte_size) >
-	    (fs->sector_cnt * fs->sector_size) - fs->ate_size) {
+	if (byte_size > (fs->sector_cnt * fs->sector_size) - fs->ate_size) {
 		return -ENOMEM;
 	}
 
@@ -418,8 +417,7 @@ int emds_flash_prepare(struct emds_fs *fs, int entry_cnt, int byte_size)
 		return rc;
 	}
 
-	if (fs->force_erase ||
-	    ((entry_cnt * fs->ate_size + byte_size) > emds_flash_free_space_get(fs))) {
+	if (fs->force_erase || (byte_size > emds_flash_free_space_get(fs))) {
 		emds_flash_clear(fs);
 		fs->force_erase = false;
 	}
