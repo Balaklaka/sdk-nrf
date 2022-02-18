@@ -84,12 +84,12 @@ int emds_init(void);
  * is called, takes the given data pointer and stores the data to the emergency
  * data storage.
  *
- * @param entry Entry to add to list.
+ * @param entry Entry to add to list and load data into.
  *
  * @retval 0 Success
  * @retval -ERRNO errno code if error
  */
-int emds_entry_add(struct emds_dynamic_entry *entry);
+int emds_entry_add(struct emds_entry *entry);
 
 /**
  * @brief Start the emergency data storage process.
@@ -107,12 +107,12 @@ int emds_entry_add(struct emds_dynamic_entry *entry);
 int emds_store(void);
 
 /**
- * @brief Load all data from the emergency data storage.
+ * @brief Load all static data from the emergency data storage.
  *
- * This function needs to be called after the static and dynamic entries are
- * added, as they are used to select the data to be loaded. The function also
- * needs to be called before the @ref emds_prepare function which will delete
- * all the stored data.
+ * This function needs to be called after the static entries are added, as they
+ * are used to select the data to be loaded. The function also needs to be
+ * called before the @ref emds_prepare function which will delete all the stored
+ * data.
  *
  * @retval 0 Success
  * @retval -ERRNO errno code if error
@@ -164,22 +164,18 @@ uint32_t emds_store_time_get(void);
 uint32_t emds_store_size_get(void);
 
 /**
- * @brief Check if the store operation has finished.
+ * @brief Check if the store operation can be run.
  *
- * @return Whether the store operation is still running or not.
+ * @return True if the store operation can be started, otherwise false.
  */
-bool emds_is_busy(void);
+bool emds_is_ready(void);
 
 /**
- * @brief Calculate the amount of space left in the flash area.
+ * @brief Check if the store operation has finished.
  *
- * The available flash area should always be larger than the size needed for the
- * registered data. If not, the flash needs to be cleared before the emergency
- * data is stored.
- *
- * @return Byte size for emergency space available in the flash storage.
+ * @return True if the store operation is completed, otherwise false.
  */
-uint32_t emds_store_size_available(void);
+bool emds_store_complete(void);
 
 #ifdef __cplusplus
 }
