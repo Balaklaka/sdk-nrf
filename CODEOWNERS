@@ -157,6 +157,7 @@ Kconfig*                                  @tejlmand
 /subsys/dm/                               @maje-emb
 /subsys/ieee802154/                       @rlubos @czeslawmakarski
 /subsys/mgmt/                             @hakonfam @sigvartmh
+/subsys/emds/                             @balaklaka
 /subsys/esb/                              @lemrey
 /subsys/event_manager/                    @pdunaj
 /subsys/event_manager_profiler_tracer/    @pdunaj @MarekPieta
