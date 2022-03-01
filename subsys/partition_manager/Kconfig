@@ -73,7 +73,7 @@ endif
 
 if SHDN_MANAGER
 partition=SHDN_STORAGE
-partition-size=0x1000
+partition-size=0x2000
 rsource "Kconfig.template.partition_size"
 endif
 

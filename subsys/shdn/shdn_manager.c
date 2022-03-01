@@ -13,7 +13,7 @@
 #include <hal/nrf_radio.h>
 #include <storage/flash_map.h>
 #include <sys/reboot.h>
-#include "shdn_storage.h"
+#include <fs/nvs.h>
 
 LOG_MODULE_REGISTER(shdn_manager, CONFIG_SHDN_MANAGER_LOG_LEVEL);
 
@@ -31,7 +31,7 @@ K_SEM_DEFINE(shdn_sem, 0, 1);
 #include <pin_debug_transport.h>
 
 struct shdn_storage {
-	struct shdn_fs cf_shdn;
+	struct nvs_fs cf_shdn;
 	uint16_t last_name_id;
 	const char *flash_dev_name;
 };
@@ -53,7 +53,7 @@ static void shdn_handler(void)
 
 	struct shdn_dynamic_entry *ch;
 	SYS_SLIST_FOR_EACH_CONTAINER(&shdn_dynamics_entries, ch, node) {
-		ssize_t len = shdn_storage_write(&default_shdn_storage.cf_shdn, 
+		ssize_t len = nvs_write(&default_shdn_storage.cf_shdn, 
 						 ch->entry.id, ch->entry.data, 
 						 ch->entry.len);
 		if (len != ch->entry.len) {
@@ -67,7 +67,7 @@ static void shdn_handler(void)
 	}
 
 	STRUCT_SECTION_FOREACH(shdn_entry, ch) {
-		ssize_t len = shdn_storage_write(&default_shdn_storage.cf_shdn, 
+		ssize_t len = nvs_write(&default_shdn_storage.cf_shdn, 
 						 ch->id, ch->data, 
 						 ch->len);
 		if (len != ch->len) {
@@ -134,7 +134,7 @@ static int shdn_manager_fs_init(void)
 	default_shdn_storage.cf_shdn.offset = fa->fa_off;
 	default_shdn_storage.flash_dev_name = fa->fa_dev_name;
 
-	rc = shdn_storage_init(&default_shdn_storage.cf_shdn, fa->fa_dev_name);
+	rc = nvs_init(&default_shdn_storage.cf_shdn, fa->fa_dev_name);
 	if (rc) {
 		return rc;
 	}
@@ -177,7 +177,7 @@ int shdn_manager_restore(void)
 {
 	struct shdn_dynamic_entry *ch;
 	SYS_SLIST_FOR_EACH_CONTAINER(&shdn_dynamics_entries, ch, node) {
-		ssize_t len = shdn_storage_read(&default_shdn_storage.cf_shdn, 
+		ssize_t len = nvs_read(&default_shdn_storage.cf_shdn, 
 						ch->entry.id, ch->entry.data, 
 						ch->entry.len);
 		if (len != ch->entry.len) {
@@ -191,7 +191,7 @@ int shdn_manager_restore(void)
 	}
 
 	STRUCT_SECTION_FOREACH(shdn_entry, ch) {
-		ssize_t len = shdn_storage_read(&default_shdn_storage.cf_shdn, 
+		ssize_t len = nvs_read(&default_shdn_storage.cf_shdn, 
 						ch->id, ch->data, 
 						ch->len);
 		if (len != ch->len) {
@@ -210,12 +210,12 @@ int shdn_manager_restore(void)
 int shdn_manager_prepare_shutdown(void)
 {
 	int rc;
-	rc = shdn_storage_clear(&default_shdn_storage.cf_shdn);
+	rc = nvs_clear(&default_shdn_storage.cf_shdn);
 	if (rc) {
 		return rc;
 	}
 
-	rc = shdn_storage_init(&default_shdn_storage.cf_shdn, default_shdn_storage.flash_dev_name);
+	rc = nvs_init(&default_shdn_storage.cf_shdn, default_shdn_storage.flash_dev_name);
 	if (rc) {
 		return rc;
 	}

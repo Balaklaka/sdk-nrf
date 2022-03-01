@@ -80,7 +80,7 @@ config SHDN_MANAGER_SECTOR_SIZE_MULT
 
 config SHDN_MANAGER_SECTOR_COUNT
 	int "Sector count of the shutdown storage area"
-	default 1
+	default 2
 	help
 	  Number of sectors used for the NVS settings area
 
