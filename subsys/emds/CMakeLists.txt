@@ -5,4 +5,5 @@
 #
 
 zephyr_sources(emds.c)
+zephyr_sources(emds_flash.c)
 zephyr_linker_sources(SECTIONS emds_types.ld)
