@@ -25,27 +25,33 @@ extern "C" {
 /**
  * @brief Emergency data storage file system structure
  *
- * @param offset File system offset in flash
+ * @param offset File system offset from start of flash
  * @param ate_wra Allocation table entry write address. Addresses are stored as uint32_t:
  * high 2 bytes correspond to the sector, low 2 bytes are the offset in the sector
- * @param data_wra Data write address
+ * @param ate_size Size of allocation table entry
+ * @param data_wra_offset Data write address offset
  * @param sector_size File system is split into sectors, each sector must be multiple of pagesize
- * @param sector_count Number of sectors in the file systems
- * @param ready Flag indicating if the filesystem is initialized
+ * @param sector_cnt Number of sectors in the file systems
+ * @param is_initialized Initialized flag
+ * @param is_prepeared Prepared for write flag
  * @param emds_lock Mutex
- * @param flash_device Flash Device runtime structure
- * @param flash_parameters Flash memory parameters structure
+ * @param flash_dev Pointer to flash device runtime structure
+ * @param flash_params Pointer to flash memory parameters structure
+ * @param force_erase Force erase flag
  */
 struct emds_fs {
 	off_t offset;
 	uint32_t ate_wra;
-	uint32_t data_wra;
+	size_t ate_size;
+	uint32_t data_wra_offset;
 	uint16_t sector_size;
-	uint16_t sector_count;
-	bool ready;
-	struct k_mutex shdn_lock;
-	const struct device *flash_device;
-	const struct flash_parameters *flash_parameters;
+	uint16_t sector_cnt;
+	bool is_initialized;
+	bool is_prepeared;
+	struct k_mutex emds_lock;
+	const struct device *flash_dev;
+	const struct flash_parameters *flash_params;
+	bool force_erase;
 };
 
 /**
@@ -92,7 +98,7 @@ ssize_t emds_flash_write(struct emds_fs *fs, uint16_t id, const void *data, size
  * @param fs Pointer to file system
  * @param id Id of the entry to be read
  * @param data Pointer to data buffer
- * @param len Number of bytes to be read
+ * @param len Number of bytes in data buffer
  *
  * @return Number of bytes read. On success, it will be equal to the number of bytes requested
  * to be read. When the return value is larger than the number of bytes requested to read this
@@ -128,7 +134,7 @@ int emds_flash_prepare(struct emds_fs *fs, int entry_cnt, int byte_size);
  *
  * @retval Remaining free space of the flash device in bytes
  */
-ssize_t emds_flash_free_space(struct emds_fs *fs);
+ssize_t emds_flash_free_space_get(struct emds_fs *fs);
 
 
 #ifdef __cplusplus
