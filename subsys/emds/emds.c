@@ -162,7 +162,7 @@ int emds_init(void)
 	return 0;
 }
 
-int emds_entry_add(struct emds_entry *entry)
+int emds_entry_add(const struct emds_entry *entry)
 {
 	struct emds_dynamic_entry *ch;
 	struct emds_dynamic_entry *item;
@@ -194,9 +194,6 @@ int emds_store(void)
 		return -ECANCELED;
 	}
 
-	/* Lock all interrupts */
-	(void)irq_lock();
-
 #if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
 	/* Disable bluetooth and mpsl scheduler if bluetooth is enabled. */
 	int rc = sdc_disable(); // Replace with bt_disable when added.
@@ -207,6 +204,9 @@ int emds_store(void)
 
 	mpsl_uninit();
 #endif
+	/* Lock all interrupts */
+	(void)irq_lock();
+
 	/* Start the emergency data storage process. */
 	k_sem_give(&emds_sem);
 
@@ -266,7 +266,6 @@ int emds_clear(void)
 
 int emds_prepare(void)
 {
-	int entries;
 	uint32_t size;
 	int rc;
 
@@ -274,7 +273,7 @@ int emds_prepare(void)
 		return -ECANCELED;
 	}
 
-	entries = emds_entries_size(&size);
+	(void)emds_entries_size(&size);
 
 	rc = emds_flash_prepare(&emds_flash, size);
 	if (rc) {

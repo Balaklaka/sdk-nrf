@@ -43,18 +43,22 @@ config EMDS_FLASH_TIME_WRITE_ONE_WORD_US
 
 config EMDS_FLASH_TIME_ENTRY_OVERHEAD_US
 	int "Time to schedule write of one entry"
-	default 1410 if BT
-	default 42
+	default 300
 	help
 	   Max time to prepare the write of each entry (in microseconds)
 
 config EMDS_FLASH_TIME_BASE_OVERHEAD_US
 	int "Time to schedule the store process"
-	default 100000 if SETTINGS && !SOC_FLASH_NRF_PARTIAL_ERASE
-	default 5000 if SETTINGS && SOC_FLASH_NRF_PARTIAL_ERASE
+	default 85000 if SETTINGS && !SOC_FLASH_NRF_PARTIAL_ERASE
+	default 9000 if SETTINGS && SOC_FLASH_NRF_PARTIAL_ERASE
 	default 500
 	help
-	   Max time to prepare the store process (in microseconds)
+	   Max time to prepare the store process (in microseconds). If used
+	   together with SETTINGS this value has to be at least as long as the
+	   time to erase one page (ERASEPAGE). If used together with
+	   SOC_FLASH_NRF_PARTIAL_ERASE this value should be
+	   (SOC_FLASH_NRF_PARTIAL_ERASE_MS * 1000 * 3). This is to account for
+	   worst case scenario, before starting storing entries.
 
 module = EMDS
 module-str = emergency data storage

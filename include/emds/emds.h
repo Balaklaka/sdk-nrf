@@ -89,7 +89,7 @@ int emds_init(void);
  * @retval 0 Success
  * @retval -ERRNO errno code if error
  */
-int emds_entry_add(struct emds_entry *entry);
+int emds_entry_add(const struct emds_entry *entry);
 
 /**
  * @brief Start the emergency data storage process.
