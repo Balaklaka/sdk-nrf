@@ -210,6 +210,7 @@ Kconfig*                                  @tejlmand
 /tests/subsys/bootloader/                 @hakonfam
 /tests/subsys/debug/cpu_load/             @nordic-krch
 /tests/subsys/dfu/                        @hakonfam @sigvartmh
+/tests/subsys/emds/                       @balaklaka
 /tests/subsys/app_event_manager/          @pdunaj @MarekPieta @rakons
 /tests/subsys/fw_info/                    @oyvindronningstad
 /tests/subsys/net/lib/aws_*/              @simensrostad
