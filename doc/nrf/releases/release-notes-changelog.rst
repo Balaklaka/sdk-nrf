@@ -419,6 +419,10 @@ Other libraries
     The library is no longer directly referenced from the Application Event Manager.
     Instead, it uses the Application Event Manager hooks to connect with the manager.
 
+* :ref:`emds_readme`:
+
+  * Added emergency data storage library.
+
 Common Application Framework (CAF)
 ----------------------------------
 
