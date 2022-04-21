@@ -11,12 +11,19 @@
 #include <settings/settings.h>
 #include <sys/reboot.h>
 #endif
+#if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
+#include <bluetooth/bluetooth.h>
+#include <sdc.h>
+#include <mpsl.h>
+#endif
+
 
 enum test_states {
 	EMDS_TS_EMPTY_FLASH,
 	EMDS_TS_STORE_DATA,
 	EMDS_TS_CLEAR_FLASH,
-	EMDS_TS_NO_STORE
+	EMDS_TS_NO_STORE,
+	EMDS_TS_SEVERAL_STORE
 };
 
 static int iteration;
@@ -24,6 +31,7 @@ static int iteration;
 static enum test_states state[] = {
 	EMDS_TS_EMPTY_FLASH,
 	EMDS_TS_STORE_DATA,
+	EMDS_TS_SEVERAL_STORE,
 	EMDS_TS_CLEAR_FLASH,
 	EMDS_TS_EMPTY_FLASH,
 	EMDS_TS_NO_STORE,
@@ -58,10 +66,20 @@ static char *print_state(enum test_states s)
 		return "STORE_DATA";
 	case EMDS_TS_CLEAR_FLASH:
 		return "CLEAR_FLASH";
+	case EMDS_TS_SEVERAL_STORE:
+		return "SEVERAL_STORE";
 	case EMDS_TS_NO_STORE:
-	default:
 		return "NO_STORE";
+	default:
+		return "UNKNOWN";
 	}
+}
+
+static void app_store_cb(void)
+{
+#if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
+	bt_enable(NULL);
+#endif
 }
 
 /** Mocks ******************************************/
@@ -82,8 +100,8 @@ static void test_init(void)
 	err = emds_clear();
 	zassert_equal(err, -ECANCELED, "Flash not initialized");
 
-	zassert_false(emds_init(), "Initializing failed");
-	zassert_equal(emds_init(), -EALREADY, "Initialization did not fail");
+	zassert_false(emds_init(&app_store_cb), "Initializing failed");
+	zassert_equal(emds_init(NULL), -EALREADY, "Initialization did not fail");
 }
 
 static void test_add_d_entries(void)
@@ -124,6 +142,9 @@ static void test_load_empty_flash(void)
 
 static void test_load_flash(void)
 {
+	memset(d_data, 0, sizeof(d_data));
+	memset(s_data, 0, sizeof(s_data));
+
 	zassert_equal(emds_load(), 0, "Load failed");
 
 	zassert_mem_equal(d_data, expect_d_data, sizeof(expect_d_data),
@@ -145,10 +166,16 @@ static void test_prepare(void)
 
 static void test_store(void)
 {
-	zassert_false(emds_store_complete(), "Store should be ready to execute");
+	zassert_true(emds_is_ready(), "Store should be ready to execute");
 
 	memcpy(d_data, expect_d_data, sizeof(expect_d_data));
 	memcpy(s_data, expect_s_data, sizeof(expect_s_data));
+
+#if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
+	/* Disable bluetooth and mpsl scheduler if bluetooth is enabled. */
+	(void) sdc_disable(); // Replace with bt_disable when added.
+	mpsl_uninit();
+#endif
 
 	int64_t start_tic = k_uptime_ticks();
 
@@ -157,7 +184,7 @@ static void test_store(void)
 	k_yield();
 	int64_t store_time_ticks = k_uptime_ticks() - start_tic;
 
-	zassert_true(emds_store_complete(), "Store not completed");
+	zassert_false(emds_is_ready(), "Store not completed");
 
 	uint64_t store_time_us = k_ticks_to_us_ceil64(store_time_ticks);
 
@@ -182,28 +209,35 @@ static bool pragma_empty_flash(const void *s)
 {
 	const enum test_states *state = s;
 
-	return (*state == EMDS_TS_EMPTY_FLASH);
+	return *state == EMDS_TS_EMPTY_FLASH;
 }
 
 static bool pragma_store_data(const void *s)
 {
 	const enum test_states *state = s;
 
-	return (*state == EMDS_TS_STORE_DATA);
+	return *state == EMDS_TS_STORE_DATA;
 }
 
 static bool pragma_clear_flash(const void *s)
 {
 	const enum test_states *state = s;
 
-	return (*state == EMDS_TS_CLEAR_FLASH);
+	return *state == EMDS_TS_CLEAR_FLASH;
 }
 
-static bool pragma_flash_no_store(const void *s)
+static bool pragma_no_store(const void *s)
 {
 	const enum test_states *state = s;
 
-	return (*state == EMDS_TS_NO_STORE);
+	return *state == EMDS_TS_NO_STORE;
+}
+
+static bool pragma_several_store(const void *s)
+{
+	const enum test_states *state = s;
+
+	return *state == EMDS_TS_SEVERAL_STORE;
 }
 
 #if CONFIG_SETTINGS
@@ -241,22 +275,39 @@ ztest_register_test_suite(_setup, pragma_always,
 ztest_register_test_suite(empty_flash, pragma_empty_flash,
 			  ztest_unit_test(test_load_empty_flash),
 			  ztest_unit_test(test_prepare),
-			  ztest_unit_test(test_store));
+			  ztest_unit_test(test_store),
+			  ztest_unit_test(test_load_flash));
 ztest_register_test_suite(store_data, pragma_store_data,
 			  ztest_unit_test(test_load_flash),
 			  ztest_unit_test(test_prepare),
-			  ztest_unit_test(test_store));
+			  ztest_unit_test(test_store),
+			  ztest_unit_test(test_load_flash));
 ztest_register_test_suite(clear_flash, pragma_clear_flash,
 			  ztest_unit_test(test_load_flash),
 			  ztest_unit_test(test_prepare),
 			  ztest_unit_test(test_store),
-			  ztest_unit_test(test_clear));
-ztest_register_test_suite(flash_no_store, pragma_flash_no_store,
+			  ztest_unit_test(test_clear),
+			  ztest_unit_test(test_load_empty_flash));
+ztest_register_test_suite(no_store, pragma_no_store,
 			  ztest_unit_test(test_load_flash),
-			  ztest_unit_test(test_prepare));
+			  ztest_unit_test(test_prepare),
+			  ztest_unit_test(test_load_empty_flash));
+ztest_register_test_suite(several_store, pragma_several_store,
+			  ztest_unit_test(test_load_flash),
+			  ztest_unit_test(test_prepare),
+			  ztest_unit_test(test_load_empty_flash),
+			  ztest_unit_test(test_store),
+			  ztest_unit_test(test_load_flash),
+			  ztest_unit_test(test_prepare),
+			  ztest_unit_test(test_load_empty_flash),
+			  ztest_unit_test(test_store),
+			  ztest_unit_test(test_load_flash));
 
 void test_main(void)
 {
+#if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
+	bt_enable(NULL);
+#endif
 #if CONFIG_SETTINGS
 	settings_subsys_init();
 	settings_register(&emds_test_conf);

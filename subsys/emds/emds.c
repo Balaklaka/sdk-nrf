@@ -11,60 +11,66 @@
 #include <drivers/flash.h>
 #include "emds_flash.h"
 
-#if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
-#include <sdc.h>
-#include <mpsl.h>
-#endif
-
 #include <logging/log.h>
 LOG_MODULE_REGISTER(emds, CONFIG_EMDS_LOG_LEVEL);
 
 K_SEM_DEFINE(emds_sem, 0, 1);
 static bool emds_ready;
 static bool emds_initialized;
-static bool emds_complete;
+static uint32_t store_key;
 
 static sys_slist_t emds_dynamic_entries;
 static struct emds_fs emds_flash;
+static emds_store_cb_t app_store_cb;
 
 static void emds_handler(void)
 {
-	k_sem_reset(&emds_sem);
-	k_sem_take(&emds_sem, K_FOREVER);
+	while (true) {
+		k_sem_reset(&emds_sem);
+		k_sem_take(&emds_sem, K_FOREVER);
 
-	k_sched_lock();
+		k_sched_lock();
 
-	LOG_DBG("Emergency Data Storeage released");
+		LOG_DBG("Emergency Data Storeage released");
 
-	STRUCT_SECTION_FOREACH(emds_entry, ch) {
-		ssize_t len = emds_flash_write(&emds_flash,
-					ch->id, ch->data, ch->len);
-		if (len < 0) {
-			LOG_ERR("Write static entry: (%d) error (%d)",
-				ch->id, len);
-		} else if (len != ch->len) {
-			LOG_ERR("Write static entry: (%d) failed (%d:%d)",
-				ch->id, ch->len, len);
+		STRUCT_SECTION_FOREACH(emds_entry, ch) {
+			ssize_t len = emds_flash_write(&emds_flash,
+						       ch->id, ch->data, ch->len);
+			if (len < 0) {
+				LOG_ERR("Write static entry: (%d) error (%d)",
+					ch->id, len);
+			} else if (len != ch->len) {
+				LOG_ERR("Write static entry: (%d) failed (%d:%d)",
+					ch->id, ch->len, len);
+			}
+		}
+
+		struct emds_dynamic_entry *ch;
+
+		SYS_SLIST_FOR_EACH_CONTAINER(&emds_dynamic_entries, ch, node) {
+			ssize_t len = emds_flash_write(&emds_flash,
+						       ch->entry.id, ch->entry.data, ch->entry.len);
+			if (len < 0) {
+				LOG_ERR("Write dynamic entry: (%d) error (%d).",
+					ch->entry.id, len);
+			}
+			if (len != ch->entry.len) {
+				LOG_ERR("Write dynamic entry: (%d) failed (%d:%d).",
+					ch->entry.id, ch->entry.len, len);
+			}
+		}
+
+		emds_ready = false;
+
+		k_sched_unlock();
+
+		/* Unlock all interrupts */
+		irq_unlock(store_key);
+
+		if (app_store_cb) {
+			app_store_cb();
 		}
 	}
-
-	struct emds_dynamic_entry *ch;
-
-	SYS_SLIST_FOR_EACH_CONTAINER(&emds_dynamic_entries, ch, node) {
-		ssize_t len = emds_flash_write(&emds_flash,
-					ch->entry.id, ch->entry.data, ch->entry.len);
-		if (len < 0) {
-			LOG_ERR("Write dynamic entry: (%d) error (%d).",
-				ch->entry.id, len);
-		}
-		if (len != ch->entry.len) {
-			LOG_ERR("Write dynamic entry: (%d) failed (%d:%d).",
-				ch->entry.id, ch->entry.len, len);
-		}
-	}
-
-	emds_complete = true;
-	k_sched_unlock();
 }
 
 K_THREAD_DEFINE(emds_tid, CONFIG_EMDS_THREAD_STACK_SIZE, emds_handler, NULL,
@@ -139,7 +145,7 @@ static int emds_entries_size(uint32_t *size)
 	return entries;
 }
 
-int emds_init(void)
+int emds_init(emds_store_cb_t cb)
 {
 	int rc;
 
@@ -154,6 +160,8 @@ int emds_init(void)
 	}
 
 	sys_slist_init(&emds_dynamic_entries);
+
+	app_store_cb = cb;
 
 	emds_initialized = true;
 
@@ -185,6 +193,8 @@ int emds_entry_add(const struct emds_entry *entry)
 	item->entry = *entry;
 	sys_slist_append(&emds_dynamic_entries, &item->node);
 
+	emds_ready = false;
+
 	return 0;
 }
 
@@ -194,18 +204,8 @@ int emds_store(void)
 		return -ECANCELED;
 	}
 
-#if defined(CONFIG_BT) && !defined(CONFIG_BT_LL_SW_SPLIT)
-	/* Disable bluetooth and mpsl scheduler if bluetooth is enabled. */
-	int rc = sdc_disable(); // Replace with bt_disable when added.
-
-	if (rc) {
-		return rc;
-	}
-
-	mpsl_uninit();
-#endif
 	/* Lock all interrupts */
-	(void)irq_lock();
+	store_key = irq_lock();
 
 	/* Start the emergency data storage process. */
 	k_sem_give(&emds_sem);
@@ -324,9 +324,4 @@ uint32_t emds_store_size_get(void)
 bool emds_is_ready(void)
 {
 	return emds_ready;
-}
-
-bool emds_store_complete(void)
-{
-	return emds_complete;
 }

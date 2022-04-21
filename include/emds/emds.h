@@ -67,15 +67,27 @@ struct emds_dynamic_entry {
 	}
 
 /**
+ * @typedef emds_store_cb_t
+ * @brief Callback for application commands when storing has been executed.
+ *
+ * This can be used to intiate reboot commands or other commands. It will run in
+ * the thread of emds.
+ */
+typedef void (*emds_store_cb_t)(void);
+
+/**
  * @brief Initialize the emergency data storage.
  *
  * Initializes the emergency data storage. This needs to be called before adding
  * entries to the @ref emds_dynamic_entry and loading data.
  *
+ * @param cb Callback to notify application store has been executed or NULL if
+ * no notification is needed.
+ *
  * @retval 0 Success
  * @retval -ERRNO errno code if error
  */
-int emds_init(void);
+int emds_init(emds_store_cb_t cb);
 
 /**
  *  @brief Add entry to be saved/restored when emergency data storage is called.
@@ -136,7 +148,8 @@ int emds_clear(void);
  * deletes the current entries if there is enough space for the next emergency
  * data storage, and clears the flash storage if there is not enough space for
  * the next storage. This has to be done after all the dynamic entries are
- * added.
+ * added. After this has been called emergency data storage should be ready to
+ * store.
  *
  * @retval 0 Success
  * @retval -ERRNO errno code if error
@@ -166,16 +179,12 @@ uint32_t emds_store_size_get(void);
 /**
  * @brief Check if the store operation can be run.
  *
+ * When the data store operation has completed, the store operation is no longer
+ * ready and this function will then return false.
+ *
  * @return True if the store operation can be started, otherwise false.
  */
 bool emds_is_ready(void);
-
-/**
- * @brief Check if the store operation has finished.
- *
- * @return True if the store operation is completed, otherwise false.
- */
-bool emds_store_complete(void);
 
 #ifdef __cplusplus
 }
