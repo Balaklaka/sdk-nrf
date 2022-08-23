@@ -17,6 +17,9 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_sync_mpsl);
 
+#define PIN_DEBUG_ENABLE
+#include <pin_debug_transport.h>
+
 /* The request length specified by the upper layers is only time required to do
  * the flash operations itself. Therefore we need to add some additional slack
  * to each timeslot request.
@@ -59,23 +62,22 @@ static uint32_t get_timeslot_time_us(void)
 
 static void reschedule_next_timeslot(void)
 {
-	_context.timeslot_request.params.earliest.priority =
-		MPSL_TIMESLOT_PRIORITY_HIGH;
+	_context.timeslot_request.params.earliest.priority = MPSL_TIMESLOT_PRIORITY_HIGH;
 
-	int32_t ret = mpsl_timeslot_request(_context.session_id,
-					    &_context.timeslot_request);
+	int32_t ret = mpsl_timeslot_request(_context.session_id, &_context.timeslot_request);
 
-	__ASSERT_EVAL((void)ret, (void)ret, ret == 0,
-		      "mpsl_timeslot_request failed: %d", ret);
+	__ASSERT_EVAL((void)ret, (void)ret, ret == 0, "mpsl_timeslot_request failed: %d", ret);
 }
 
-static mpsl_timeslot_signal_return_param_t *
-timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
+static mpsl_timeslot_signal_return_param_t *timeslot_callback(mpsl_timeslot_session_id_t session_id,
+							      uint32_t signal)
 {
 	int rc;
 	__ASSERT_NO_MSG(session_id == _context.session_id);
 
 	if (atomic_get(&_context.timeout_occured)) {
+//		LOG_DBG("timeout_occured");
+		DBP0_ON; DBP_DELAY; DBP0_OFF;
 		return NULL;
 	}
 
@@ -83,24 +85,27 @@ timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
 	case MPSL_TIMESLOT_SIGNAL_START:
 		rc = _context.op_desc->handler(_context.op_desc->context);
 		if (rc != FLASH_OP_ONGOING) {
+//			LOG_DBG("Start end");
+			DBP1_ON; DBP_DELAY; DBP1_OFF;
 			_context.status = (rc == FLASH_OP_DONE) ? 0 : rc;
-			_context.return_param.callback_action =
-				MPSL_TIMESLOT_SIGNAL_ACTION_END;
+			_context.return_param.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_END;
 		} else {
+//			LOG_DBG("Start continue");
+			DBP2_ON; DBP_DELAY; DBP2_OFF;
 			/* Reset the priority back to normal after a successful
 			 * timeslot. */
 			_context.timeslot_request.params.earliest.priority =
 				MPSL_TIMESLOT_PRIORITY_NORMAL;
 
-			_context.return_param.callback_action =
-				MPSL_TIMESLOT_SIGNAL_ACTION_REQUEST;
-			_context.return_param.params.request.p_next =
-				&_context.timeslot_request;
+			_context.return_param.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_REQUEST;
+			_context.return_param.params.request.p_next = &_context.timeslot_request;
 		}
 
 		break;
 
 	case MPSL_TIMESLOT_SIGNAL_SESSION_IDLE:
+//		LOG_DBG("Idle");
+		DBP3_ON; DBP_DELAY; DBP3_OFF;
 		/* All requests are done, that means we are done. */
 		k_sem_give(&_context.timeout_sem);
 		return NULL;
@@ -110,6 +115,8 @@ timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
 
 	case MPSL_TIMESLOT_SIGNAL_CANCELLED:
 	case MPSL_TIMESLOT_SIGNAL_BLOCKED:
+//		LOG_DBG("Blocked");
+		DBP4_ON; DBP_DELAY; DBP4_OFF;
 		/* Retry the failed request. */
 		reschedule_next_timeslot();
 		return NULL;
@@ -125,6 +132,8 @@ timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
 int nrf_flash_sync_init(void)
 {
 	LOG_DBG("");
+	DBP_PORTA_ENABLE;
+	DBP_PORTB_ENABLE;
 	return k_sem_init(&_context.timeout_sem, 0, 1);
 }
 
@@ -145,8 +154,7 @@ int nrf_flash_sync_exe(struct flash_op_desc *op_desc)
 
 	int errcode = MULTITHREADING_LOCK_ACQUIRE();
 	__ASSERT_NO_MSG(errcode == 0);
-	int32_t ret = mpsl_timeslot_session_open(timeslot_callback,
-						 &_context.session_id);
+	int32_t ret = mpsl_timeslot_session_open(timeslot_callback, &_context.session_id);
 	MULTITHREADING_LOCK_RELEASE();
 
 	if (ret < 0) {
@@ -160,7 +168,7 @@ int nrf_flash_sync_exe(struct flash_op_desc *op_desc)
 	req->params.earliest.priority = MPSL_TIMESLOT_PRIORITY_NORMAL;
 	req->params.earliest.length_us =
 		_context.request_length_us + TIMESLOT_LENGTH_SLACK_US;
-	req->params.earliest.timeout_us = MPSL_TIMESLOT_EARLIEST_TIMEOUT_MAX_US;
+	req->params.earliest.timeout_us = 30000;
 
 	_context.op_desc = op_desc;
 	_context.status = -ETIMEDOUT;
