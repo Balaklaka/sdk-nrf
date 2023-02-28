@@ -11,6 +11,9 @@
 #define LOG_MODULE_NAME bt_mesh_mod
 #include "common/log.h"
 
+#define PIN_DEBUG_ENABLE
+#include "pin_debug_transport.h"
+
 /** Unknown encoded transition time value */
 #define TRANSITION_TIME_UNKNOWN (0x3F)
 
@@ -110,12 +113,20 @@ int model_send(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 	}
 
 	if (ctx) {
+		DBP9_ON;
+		DBP_DELAY;
+		DBP9_OFF;
+		BT_ERR("model send");
 		return bt_mesh_model_send(model, ctx, buf, NULL, 0);
 	}
 
 	net_buf_simple_reset(model->pub->msg);
 	net_buf_simple_add_mem(model->pub->msg, buf->data, buf->len);
 
+	// DBP10_ON;
+	// DBP_DELAY;
+	// DBP10_OFF;
+	BT_ERR("model publish");
 	return bt_mesh_model_publish(model);
 }
 

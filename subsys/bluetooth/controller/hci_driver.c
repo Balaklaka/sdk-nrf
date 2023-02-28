@@ -35,6 +35,9 @@
 #define LOG_MODULE_NAME sdc_hci_driver
 #include "common/log.h"
 
+#define PIN_DEBUG_ENABLE
+#include "pin_debug_transport.h"
+
 #if defined(CONFIG_BT_CONN)
 /* It should not be possible to set CONFIG_BT_CTLR_SDC_PERIPHERAL_COUNT larger than
  * CONFIG_BT_MAX_CONN. Kconfig should make sure of that, this assert is to
@@ -159,7 +162,11 @@ void sdc_assertion_handler(const char *const file, const uint32_t line)
 static struct k_work receive_work;
 static inline void receive_signal_raise(void)
 {
+	DBP11_ON;
+	DBP6_ON;
 	mpsl_work_submit(&receive_work);
+	DBP11_OFF;
+	DBP6_OFF;
 }
 
 static int cmd_handle(struct net_buf *cmd)
@@ -396,8 +403,11 @@ void hci_driver_receive_process(void)
 static void receive_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
-
+	DBP8_ON;
+	DBP0_ON;
 	hci_driver_receive_process();
+	DBP8_OFF;
+	DBP0_OFF;
 }
 
 static const struct device *entropy_source = DEVICE_DT_GET(DT_NODELABEL(rng));

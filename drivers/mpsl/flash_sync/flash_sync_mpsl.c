@@ -17,6 +17,9 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_sync_mpsl);
 
+#define PIN_DEBUG_ENABLE
+#include "pin_debug_transport.h"
+
 /* The request length specified by the upper layers is only time required to do
  * the flash operations itself. Therefore we need to add some additional slack
  * to each timeslot request.
@@ -85,6 +88,8 @@ timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
 
 	switch (signal) {
 	case MPSL_TIMESLOT_SIGNAL_START:
+		//DBP3_ON;
+		DBP12_ON;
 		rc = _context.op_desc->handler(_context.op_desc->context);
 		if (rc != FLASH_OP_ONGOING) {
 			_context.status = (rc == FLASH_OP_DONE) ? 0 : rc;
@@ -107,6 +112,8 @@ timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
 		break;
 
 	case MPSL_TIMESLOT_SIGNAL_SESSION_IDLE:
+		//DBP3_OFF;
+		DBP12_OFF;
 		/* All requests are done, that means we are done. */
 		k_sem_give(&_context.timeout_sem);
 		return NULL;
