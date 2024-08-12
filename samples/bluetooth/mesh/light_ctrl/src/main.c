@@ -14,6 +14,10 @@
 #include "model_handler.h"
 #include "lc_pwm_led.h"
 
+#if defined(CONFIG_NCS_SAMPLE_MCUMGR_BT_OTA_DFU)
+#include "smp_bt.h"
+#endif
+
 #ifdef CONFIG_EMDS
 #include <emds/emds.h>
 
@@ -130,6 +134,14 @@ static void bt_ready(int err)
 	bt_mesh_prov_enable(BT_MESH_PROV_ADV | BT_MESH_PROV_GATT);
 
 	printk("Mesh initialized\n");
+
+#if defined(CONFIG_NCS_SAMPLE_MCUMGR_BT_OTA_DFU)
+	/* Start advertising SMP BT service. */
+	err = smp_dfu_init();
+	if (err) {
+		printk("SMP initialization failed (err: %d)\n", err);
+	}
+#endif
 
 	model_handler_start();
 }
